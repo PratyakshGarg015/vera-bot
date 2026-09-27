@@ -19,40 +19,44 @@ client = anthropic.Anthropic(api_key=CLAUDE_API_KEY)
 def load_data():
     data = {}
     
-    # Load all merchants from folder
+    # Load merchants - they're at root level
     merchants = {}
-    for file in Path("expanded/merchants").glob("*.json"):
+    for file in Path(".").glob("m_*.json"):
         with open(file) as f:
             merchant_id = file.stem
             merchants[merchant_id] = json.load(f)
     data["merchants"] = merchants
     
-    # Load all customers from folder
+    # Load customers - at root level
     customers = {}
-    for file in Path("expanded/customers").glob("*.json"):
+    for file in Path(".").glob("c_*.json"):
         with open(file) as f:
             customer_id = file.stem
             customers[customer_id] = json.load(f)
     data["customers"] = customers
     
-    # Load all triggers from folder
+    # Load triggers - at root level
     triggers = {}
-    for file in Path("expanded/triggers").glob("*.json"):
+    for file in Path(".").glob("trg_*.json"):
         with open(file) as f:
             trigger_id = file.stem
             triggers[trigger_id] = json.load(f)
     data["triggers"] = triggers
     
     # Load test pairs
-    with open("expanded/test_pairs.json") as f:
-        data["test_pairs"] = json.load(f)
+    try:
+        with open("test_pairs.json") as f:
+            data["test_pairs"] = json.load(f)
+    except:
+        data["test_pairs"] = []
     
-    # Load categories
+    # Load categories - at root level
     data["categories"] = {}
-    for file in Path("expanded/categories").glob("*.json"):
-        with open(file) as f:
-            category_name = file.stem
-            data["categories"][category_name] = json.load(f)
+    for file in Path(".").glob("*s.json"):
+        if file.stem in ["dentists", "restaurants", "salons", "gyms", "pharmacies"]:
+            with open(file) as f:
+                category_name = file.stem
+                data["categories"][category_name] = json.load(f)
     
     return data
 
@@ -131,14 +135,11 @@ Return ONLY a JSON object with:
             ]
         )
         
-        # Parse response
         response_text = response.content[0].text
         
-        # Extract JSON from response
         try:
             result = json.loads(response_text)
         except json.JSONDecodeError:
-            # If response isn't pure JSON, try to extract it
             start = response_text.find('{')
             end = response_text.rfind('}') + 1
             if start >= 0 and end > start:
@@ -184,7 +185,6 @@ def store_context(payload: Dict[str, Any]):
     context_id = payload.get("context_id")
     version = payload.get("version")
     
-    # Store context (idempotent by version)
     key = f"{scope}:{context_id}"
     context_store[key] = payload
     
@@ -196,13 +196,10 @@ def store_context(payload: Dict[str, Any]):
 
 @app.post("/v1/tick")
 def generate_message(payload: Dict[str, Any]):
-    """Generate the next message based on trigger, merchant, customer"""
-    
     trigger_id = payload.get("trigger_id")
     merchant_id = payload.get("merchant_id")
     customer_id = payload.get("customer_id")
     
-    # Load context
     trigger = get_trigger(trigger_id)
     merchant = get_merchant(merchant_id)
     customer = get_customer(customer_id)
@@ -213,17 +210,14 @@ def generate_message(payload: Dict[str, Any]):
             "message": "Unable to compose message"
         }
     
-    # Get category
     category = get_category(merchant['category_slug'])
     
-    # Compose message using Claude
     result = compose_message_with_claude(trigger, merchant, category, customer)
     
     return result
 
 @app.post("/v1/reply")
 def handle_reply(payload: Dict[str, Any]):
-    """Handle incoming customer replies"""
     return {"received": True}
 
 # =========== RUN ===========
